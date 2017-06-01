@@ -44,10 +44,12 @@ public class SequencerManager {
 	}
 
 	private Sequencer sequencer;
+	private Synthesizer previousSynth;
     private CopyOnWriteArrayList<EndOfTrackListener> endOfTrackListeners;
 
-	public SequencerManager() throws MidiUnavailableException { 
+	private SequencerManager() throws MidiUnavailableException { 
 		this.sequencer = getDefaultSequencer();
+		this.previousSynth = SynthesizerManager.getInstance().getSynthesizer();
 		endOfTrackListeners = new CopyOnWriteArrayList<EndOfTrackListener>();
 	}
 	
@@ -91,9 +93,18 @@ public class SequencerManager {
 		}
 	}
 	
-	public void connectSequencerToSynthesizer(Synthesizer synth) throws MidiUnavailableException {
+	public void connectSequencerToSynthesizer() throws MidiUnavailableException {
+	    Synthesizer synth = SynthesizerManager.getInstance().getSynthesizer();
+	    if (synth == previousSynth) {
+	        return;
+	    }
+	    this.previousSynth = synth;
         if (!synth.isOpen()) {
             synth.open();
+        }
+        Sequencer sequencer = openSequencer();
+        if (sequencer.getTransmitter().getReceiver() != null) {
+            sequencer.getTransmitter().getReceiver().close();
         }
 		openSequencer().getTransmitter().setReceiver(synth.getReceiver());
 	}

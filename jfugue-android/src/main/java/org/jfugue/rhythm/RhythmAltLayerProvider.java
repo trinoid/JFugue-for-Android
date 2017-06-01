@@ -28,7 +28,7 @@ public interface RhythmAltLayerProvider {
 	 * If there is no alt layer to provide, return null. 
 	 * @param segment The index into rhythm's length 
 	 * @return a new alt layer, or null if no alt layer is to be provided
-	 * @see org.jfugue.rhythm.Rhythm.setLength()
+	 * @see Rhythm.setLength()
 	 */
 	public String provideAltLayer(int segment);
 }

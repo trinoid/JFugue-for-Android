@@ -19,15 +19,15 @@
 
 package org.jfugue.midi;
 
-import org.jfugue.parser.ParserListener;
-import org.jfugue.theory.Chord;
-import org.jfugue.theory.Note;
-
 import java.util.logging.Logger;
 
 import jp.kshoji.javax.sound.midi.InvalidMidiDataException;
 import jp.kshoji.javax.sound.midi.Sequence;
 import jp.kshoji.javax.sound.midi.ShortMessage;
+
+import org.jfugue.parser.ParserListener;
+import org.jfugue.theory.Chord;
+import org.jfugue.theory.Note;
 
 public class MidiParserListener implements ParserListener
 {
@@ -65,12 +65,12 @@ public class MidiParserListener implements ParserListener
 
     @Override
     public void onLayerChanged(byte layer) {
-        this.eventManager.setCurrentLayer(layer);
+        this.eventManager.setCurrentLayerNumber(layer);
     }
 
     @Override
     public void onInstrumentParsed(byte instrument) {
-        this.eventManager.addEvent(ShortMessage.PROGRAM_CHANGE, instrument, 0);
+        this.eventManager.addEvent(ShortMessage.PROGRAM_CHANGE, instrument, 0); 
     }
 
     @Override
@@ -145,6 +145,12 @@ public class MidiParserListener implements ParserListener
     @Override
     public void onFunctionParsed(String id, Object message) { }
 
+    @Override
+    public void onNotePressed(Note note) { }
+    
+    @Override
+    public void onNoteReleased(Note note) { }
+    
     @Override
     public void onNoteParsed(Note note) {
         this.eventManager.addNote(note);

@@ -19,15 +19,15 @@
 
 package org.jfugue.devices;
 
-import org.jfugue.midi.MidiDefaults;
-import org.jfugue.midi.MidiTools;
-
 import jp.kshoji.javax.sound.midi.InvalidMidiDataException;
 import jp.kshoji.javax.sound.midi.MidiDevice;
 import jp.kshoji.javax.sound.midi.MidiUnavailableException;
 import jp.kshoji.javax.sound.midi.Receiver;
 import jp.kshoji.javax.sound.midi.Sequence;
 import jp.kshoji.javax.sound.midi.ShortMessage;
+
+import org.jfugue.midi.MidiDefaults;
+import org.jfugue.midi.MidiTools;
 
 /**
  * Represents a device that can receive music that is sent to it. For example, you

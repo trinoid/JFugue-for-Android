@@ -19,11 +19,6 @@
 
 package org.jfugue.midi;
 
-import org.jfugue.pattern.Pattern;
-import org.jfugue.pattern.PatternProducer;
-import org.jfugue.player.Player;
-import org.staccato.StaccatoParserListener;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -35,6 +30,11 @@ import java.net.URL;
 import jp.kshoji.javax.sound.midi.InvalidMidiDataException;
 import jp.kshoji.javax.sound.midi.MidiSystem;
 import jp.kshoji.javax.sound.midi.Sequence;
+
+import org.jfugue.pattern.Pattern;
+import org.jfugue.pattern.PatternProducer;
+import org.jfugue.player.Player;
+import org.staccato.StaccatoParserListener;
 
 public class MidiFileManager 
 {
@@ -49,6 +49,10 @@ public class MidiFileManager
 		MidiFileManager.save(sequence, new FileOutputStream(file));
 	}
 	
+	public static Sequence load(File file) throws IOException, InvalidMidiDataException {
+	    return MidiSystem.getSequence(file);
+	}
+	
 	public static void savePatternToMidi(PatternProducer patternProducer, OutputStream out) throws IOException {
 		MidiFileManager.save(new Player().getSequence(patternProducer), out);
 	}
@@ -58,7 +62,7 @@ public class MidiFileManager
 		MidiFileManager.savePatternToMidi(patternProducer, new FileOutputStream(file));
 	}
 	
-	public static Pattern loadPatternFromMidi(InputStream in) throws IOException, InvalidMidiDataException {
+	public static Pattern loadPatternFromMidi(InputStream in) throws IOException, InvalidMidiDataException { 
 		MidiParser midiParser = new MidiParser();
 		StaccatoParserListener staccatoListener = new StaccatoParserListener();
         midiParser.addParserListener(staccatoListener);

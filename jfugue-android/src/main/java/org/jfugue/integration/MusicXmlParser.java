@@ -57,7 +57,7 @@ import org.staccato.DefaultNoteSettingsManager;
  * @author Richard Lavoie (Major rewriting)
  * 
  */
-public final class MusicXmlParser_R extends Parser {
+public final class MusicXmlParser extends Parser {
 
 	private static class MidiInstrument {
 		
@@ -215,7 +215,7 @@ public final class MusicXmlParser_R extends Parser {
 	}
 
 	// CONSTRUCTOR
-	public MusicXmlParser_R() throws ParserConfigurationException {
+	public MusicXmlParser() throws ParserConfigurationException {
 		xomBuilder = new Builder();
 
 		// Set up MusicXML default values
@@ -676,7 +676,7 @@ public final class MusicXmlParser_R extends Parser {
 	}
 
 	/**
-	 * Converts a step to it's note value.
+	 * Converts a step to its note value.
 	 * @param step 
 	 * 		Note step which is one of A,B,C,D,E,F or G
 	 * @return 

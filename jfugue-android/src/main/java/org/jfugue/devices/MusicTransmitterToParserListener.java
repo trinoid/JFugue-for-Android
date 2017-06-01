@@ -19,8 +19,6 @@
 
 package org.jfugue.devices;
 
-import org.jfugue.parser.ParserListener;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,11 +26,13 @@ import jp.kshoji.javax.sound.midi.MidiDevice;
 import jp.kshoji.javax.sound.midi.MidiUnavailableException;
 import jp.kshoji.javax.sound.midi.Transmitter;
 
+import org.jfugue.parser.ParserListener;
+
 /**
  * Represents a device that will send music. For example, you can attach this
  * to your external MIDI keyboard and play music on the keyboard, which is then recorded here.
  */
-public class MusicTransmitter 
+public class MusicTransmitterToParserListener 
 {
     private MidiDevice device;
     private boolean isInitiated;
@@ -40,10 +40,11 @@ public class MusicTransmitter
     private MidiParserReceiver mrftd;
     private List<ParserListener> listeners;
     
-    public MusicTransmitter(MidiDevice device) throws MidiUnavailableException {
+    public MusicTransmitterToParserListener(MidiDevice device) throws MidiUnavailableException {
         this.device = device;
         this.isInitiated = false;
         this.listeners = new ArrayList<ParserListener>();
+        this.mrftd = new MidiParserReceiver();
     }
     
     private void init() throws MidiUnavailableException {
@@ -53,14 +54,15 @@ public class MusicTransmitter
                   device.open();
                 }
                 this.transmitter = device.getTransmitter();
-                this.mrftd = new MidiParserReceiver();
-                for (ParserListener listener : listeners) {
-                    this.mrftd.getParser().addParserListener(listener);
-                }
             } catch (MidiUnavailableException e) {
                 device.close();
                 throw e;
             }
+        }
+        
+        this.mrftd.getParser().clearParserListeners();
+        for (ParserListener listener : listeners) {
+            this.mrftd.getParser().addParserListener(listener);
         }
     }
     
@@ -80,15 +82,6 @@ public class MusicTransmitter
         return this.mrftd;
     }
     
-    /**
-     * Reads a pattern from the external device - use this to record the
-     * keys you're pressing on the keyboard!  
-     * 
-     * This method will return a JFugue Pattern, which you can then 
-     * manipulate to your heart's content.
-     * 
-     * @return The Pattern representing the music played on the device
-     */
     public void startListening() throws MidiUnavailableException {
         init();
         mrftd.getParser().startParser();

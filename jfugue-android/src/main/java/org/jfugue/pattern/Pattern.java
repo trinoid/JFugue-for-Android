@@ -25,16 +25,22 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
+import org.jfugue.midi.MidiDefaults;
 import org.jfugue.midi.MidiDictionary;
+import org.jfugue.parser.ParserListener;
+import org.jfugue.pattern.Token.TokenType;
 import org.staccato.IVLSubparser;
-import org.staccato.NoteSubparser;
+import org.staccato.StaccatoParser;
+import org.staccato.StaccatoParserPatternHelper;
 import org.staccato.TempoSubparser;
 
-public class Pattern implements PatternProducer
+public class Pattern implements PatternProducer, TokenProducer
 {
 	protected StringBuilder patternSB;
 	private int explicitVoice = UNDECLARED_EXPLICIT;
+	private int explicitLayer = UNDECLARED_EXPLICIT;
 	private int explicitInstrument = UNDECLARED_EXPLICIT;
 	private int explicitTempo = UNDECLARED_EXPLICIT;
 	
@@ -74,29 +80,47 @@ public class Pattern implements PatternProducer
         patternSB.append(string);
         return this;
     }
-    
-    public Pattern prepend(PatternProducer... producers) {
-        for (PatternProducer producer : producers) {
-            this.prepend(producer.getPattern().toString());
+
+    public Pattern add(PatternProducer producer, int repetitions) {
+        for (int i=0; i < repetitions; i++) {
+            this.add(producer);
         }
         return this;
     }
+
+    public Pattern add(String string, int repetitions) {
+        for (int i=0; i < repetitions; i++) {
+            this.add(string);
+        }
+        return this;
+    }
+
+    /**
+     * Prepends each producer in the order it is passed in, 
+     * so if you pass in "F F", "G G", and "E E", and the current
+     * pattern is "A A", you will get "F F G G E E A A".
+     */
+    public Pattern prepend(PatternProducer... producers) {
+        StringBuilder temp = new StringBuilder();
+        for (PatternProducer producer : producers) {
+            temp.append(producer.getPattern().toString());
+            temp.append(" ");
+        }
+        this.prepend(temp.toString().trim());
+        return this;
+    }
     
+    /** 
+     * Inserts the given string to the beginning of this pattern.
+     * If there is content in this pattern already, this method will
+     * insert a space between the given string and this pattern so
+     * the tokens remain separate.
+     */
     public Pattern prepend(String string) {
     	if (patternSB.length() > 0) {
     		patternSB.insert(0, " ");
     	}
     	patternSB.insert(0, string);
-    	return this;
-    }
-    
-    // This method necessarily digs into Staccato to get the VOICE indicator
-    public Pattern addTrack(int trackNumber, PatternProducer producer) {
-    	patternSB.append(" ");
-    	patternSB.append(IVLSubparser.VOICE);
-    	patternSB.append(trackNumber);
-    	patternSB.append(" ");
-    	patternSB.append(producer);
     	return this;
     }
     
@@ -113,10 +137,66 @@ public class Pattern implements PatternProducer
     	this.patternSB = p2.patternSB;
     	return this;
     }
-    
-	@Override
+        
+    /**
+     * Turns the given pattern into a pattern of Voice-Instrument-Note atoms
+     * 
+     * @return this pattern for method chaining
+     */
+    public Pattern atomize() {
+    	String currentVoice;
+    	String[] currentLayer = new String[MidiDefaults.TRACKS];      // Most recent layer for each voice
+    	String[] currentInstrument = new String[MidiDefaults.TRACKS]; // Most recent instrument for each voice
+    	List<Token> tokens = this.getTokens();
+
+    	// Set current values
+    	currentVoice = "" + IVLSubparser.VOICE + valueOrZero(this.explicitVoice);
+    	currentLayer[valueOrZero(this.explicitVoice)] = "" + IVLSubparser.LAYER + valueOrZero(this.explicitLayer);
+    	currentInstrument[valueOrZero(this.explicitVoice)] = "" + IVLSubparser.INSTRUMENT + valueOrZero(this.explicitInstrument);
+    	
+    	// Clear the current contents of pattern (except for Tempo)
+    	this.patternSB.delete(0, this.patternSB.length()); 
+    	this.explicitVoice = UNDECLARED_EXPLICIT;
+    	this.explicitLayer = UNDECLARED_EXPLICIT;
+    	this.explicitInstrument = UNDECLARED_EXPLICIT;
+    	
+    	int voiceCounter = 0;
+    	for (Token token : tokens) {
+    		String s = token.getPattern().toString();
+    		switch (token.getType()) {
+    		case VOICE: 
+    			currentVoice = s; 
+    		    voiceCounter = IVLSubparser.getInstance().getValue(currentVoice, null); 
+    		    if (currentLayer[voiceCounter] == null) currentLayer[voiceCounter] = IVLSubparser.LAYER + "0"; 
+    		    if (currentInstrument[voiceCounter] == null) currentInstrument[voiceCounter] = IVLSubparser.INSTRUMENT + "0"; 
+    		    break;
+    		case LAYER: currentLayer[voiceCounter] = s; break;
+    		case INSTRUMENT: currentInstrument[voiceCounter] = s; break;
+    		case NOTE: this.add(new Atom(currentVoice, currentLayer[voiceCounter], currentInstrument[voiceCounter], s)); break;
+    		default: this.add(s); break;
+    		} 
+    	}
+    	
+    	return this;
+    }
+
+    /**
+     * If the provided value is equal to UNDECLARED_EXPLICIT, return 0. 
+     * Otherwise, return the value.
+     */
+    private int valueOrZero(int value) {
+    	return (value == UNDECLARED_EXPLICIT ? 0 : value);
+    }
+   
+    @Override
     public Pattern getPattern() {
 	    return this;
+	}
+	
+	@Override
+	public List<Token> getTokens() {
+	    StaccatoParserPatternHelper spph = new StaccatoParserPatternHelper();
+	    return spph.getTokens(this.getPattern());
 	}
 	
 	public String toString() {
@@ -135,7 +215,14 @@ public class Pattern implements PatternProducer
 			b2.append(explicitVoice);
 			b2.append(" ");
 		}
-		
+
+		// Add the explicit layer, if one has been provided
+		if (explicitLayer != UNDECLARED_EXPLICIT) {
+			b2.append(IVLSubparser.LAYER);
+			b2.append(explicitVoice);
+			b2.append(" ");
+		}
+
 		// Add the explicit voice, if one has been provided
 		if (explicitInstrument != UNDECLARED_EXPLICIT) {
 			b2.append(IVLSubparser.INSTRUMENT);
@@ -189,18 +276,34 @@ public class Pattern implements PatternProducer
 	}
 	
 	/**
-	 * Provides a way to explicitly set the instrument on a Pattern directly
+	 * Provides a way to explicitly set the voice on a Pattern directly
 	 * through the pattern rather than by adding text to the contents
 	 * of the Pattern.
 	 * 
 	 * When Pattern.toString() is called, the a voice will be prepended 
 	 * to the beginning of the pattern after any explicit tempo and before any
-	 * explicit instrument in the form of "Vx", where x is the voice number
+	 * explicit layer in the form of "Vx", where x is the voice number
      *
 	 * @return this pattern 
 	 */
 	public Pattern setVoice(int voice) {
 		this.explicitVoice = voice;
+		return this;
+	}
+
+	/**
+	 * Provides a way to explicitly set the layer on a Pattern directly
+	 * through the pattern rather than by adding text to the contents
+	 * of the Pattern.
+	 * 
+	 * When Pattern.toString() is called, the a layer will be prepended 
+	 * to the beginning of the pattern after any explicit voice and before any
+	 * explicit instrument in the form of "Lx", where x is the voice number
+     *
+	 * @return this pattern 
+	 */
+	public Pattern setLayer(int layer) {
+		this.explicitLayer = layer;
 		return this;
 	}
 
@@ -256,36 +359,54 @@ public class Pattern implements PatternProducer
 	 * 
 	 * Examples:
 	 * 
-	 * new Pattern("A B C").addToEachNoteElement("q") 		--> "Aq Bq Cq"
-	 * new Pattern("A B C").addToEachNoteElement("q i") 	--> "Aq Bi Cq" (rolls back to q for third note)
-	 * new Pattern("A B C").addToEachNoteElement("q i s") 	--> "Aq Bi Cs"
-	 * new Pattern("A B C").addToEachNoteElement("q i s w") --> "Aq Bi Cs" (same as "q i s")
+	 * new Pattern("A B C").addToEachNoteToken("q")       --> "Aq Bq Cq"
+	 * new Pattern("A B C").addToEachNoteToken("q i")     --> "Aq Bi Cq" (rolls back to q for third note)
+	 * new Pattern("A B C").addToEachNoteToken("q i s")   --> "Aq Bi Cs"
+	 * new Pattern("A B C").addToEachNoteToken("q i s w") --> "Aq Bi Cs" (same as "q i s")
 	 * 
 	 * @return this pattern
 	 */
-	public Pattern addToEachNoteElement(String decoratorString) {
-		StringBuilder b2 = new StringBuilder();
-		int currentDecorator = 0;
-		String[] decorators = decoratorString.split(" ");
-		String[] elements = patternSB.toString().split(" ");
-		for (String element : elements) {
-			if (NoteSubparser.getInstance().matches(element)) {
-				b2.append(element);
-				b2.append(decorators[currentDecorator++ % decorators.length]);
-			} else {
-				b2.append(element);
-			}
-			b2.append(" ");
-		}
+	public Pattern addToEachNoteToken(String decoratorString) {
+        int currentDecorator = 0;
+        String[] decorators = decoratorString.split(" ");
+
+	    StringBuilder b2 = new StringBuilder();
+
+	    List<Token> tokens = this.getTokens();
+	    for (Token token : tokens) {
+	        if (token.getType() == TokenType.NOTE) {
+	            b2.append(token);
+	            b2.append(decorators[currentDecorator++ % decorators.length]);
+	        } else {
+	            b2.append(token);
+	        }
+	        b2.append(" ");
+	    }
+	    
 		this.patternSB = new StringBuilder(b2.toString().trim());
 		return this;
 	}
 	
 	public Pattern save(File file) throws IOException {
-		BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-		writer.write(this.toString());
-		writer.close();
-		return this;
+	    return save(file, (String)null);
+	}
+	
+	public Pattern save(File file, String... comments) throws IOException {
+        BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+        if (comments.length > 0) {
+            writer.write("# \n");
+        }
+        for (String comment : comments) {
+            writer.write("# ");
+            writer.write(comment);
+            writer.write("\n");
+        }
+        if (comments.length > 0) {
+            writer.write("# \n\n");
+        }
+        writer.write(this.toString());
+        writer.close();
+        return this;
 	}
 	
 	public static Pattern load(File file) throws IOException {
@@ -293,10 +414,42 @@ public class Pattern implements PatternProducer
 		Pattern pattern = new Pattern();
 		String line = null;
 		while ((line = reader.readLine()) != null) {
-			pattern.add(line);
+		    if (!line.startsWith("#")) {
+		        pattern.add(line);
+		    }
 		}
 		reader.close();
 		return pattern;
+	}
+	
+	/** 
+	 * Parse this pattern and have the given ParserListener listen to it.
+	 * The user will need to call a function on the listener to get the result.
+	 * This method returns its own class, the contents of which ARE NOT modified by this call.
+	 */
+	public Pattern transform(ParserListener listener) {
+	    return parseAndListen(listener);
+	}
+	
+    /** 
+     * Parse this pattern and have the given ParserListener listen to it.
+     * The user will need to call a function on the listener to get the result.
+     * This method returns its own class, the contents of which ARE NOT modified by this call.
+     */
+	public Pattern measure(ParserListener listener) {
+	    return parseAndListen(listener);
+	}
+	
+    /** 
+     * Parse this pattern and have the given ParserListener listen to it.
+     * The user will need to call a function on the listener to get the result.
+     * This method returns its own class, the contents of which ARE NOT modified by this call.
+     */
+	private Pattern parseAndListen(ParserListener listener) {
+	    StaccatoParser parser = new StaccatoParser();
+	    parser.addParserListener(listener);
+	    parser.parse(getPattern());
+	    return this;
 	}
 	
 	private static final int UNDECLARED_EXPLICIT = -1;

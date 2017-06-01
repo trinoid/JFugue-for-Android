@@ -45,7 +45,7 @@ group = 'jp.kshoji'
 uploadArchives {
     repositories {
         mavenDeployer {
-            pom.version = '5.0.1.201503'
+            pom.version = '5.0.9.201706'
             pom.artifactId = 'jfugue-android'
             repository url: 'file://' + file('snapshot').absolutePath
         }

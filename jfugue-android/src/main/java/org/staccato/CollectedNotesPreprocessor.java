@@ -33,7 +33,7 @@ public class CollectedNotesPreprocessor implements Preprocessor
 		return instance;
 	}
 
-	private static Pattern parenPattern = Pattern.compile("\\([^\\)]*\\)\\S");
+	private static java.util.regex.Pattern parenPattern = Pattern.compile("\\([^\\)]*\\)\\S");
 	
 	@Override
 	public String preprocess(String s, StaccatoParserContext context) {

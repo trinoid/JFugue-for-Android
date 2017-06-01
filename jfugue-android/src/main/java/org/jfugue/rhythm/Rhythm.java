@@ -110,7 +110,7 @@ public class Rhythm implements PatternProducer
      * Returns all layers, including altLayers, for the given segment
      * @see getLayers
      */
-    public String[] getLayersForSegment(int segment) {
+    public String[] getLayersAt(int segment) {
     	String[] retVal = new String[layers.size()];
     	for (int layer = 0; layer < layers.size(); layer++) {
     		List<AltLayer> altLayers = getSortedAltLayersForLayer(layer);
@@ -296,6 +296,7 @@ public class Rhythm implements PatternProducer
     	return this.length;
     }
 
+    
     /**
      * Uses the RhythmKit to translate the given rhythm into a Staccato music string.
      * @see getPattern
@@ -313,23 +314,24 @@ public class Rhythm implements PatternProducer
 		return buddy.toString().trim();
     }
     
+    public Pattern getPatternAt(int segment) {
+        Pattern pattern = new Pattern(StaccatoUtil.createTrackElement((byte)9));
+        byte layerCounter = 0;
+        for (String layer : getLayersAt(segment)) {
+            pattern.add(StaccatoUtil.createLayerElement(layerCounter));
+            layerCounter++;
+            pattern.add(getStaccatoStringForRhythm(layer));
+        }
+        return pattern;
+    }
+    
     @Override
     public Pattern getPattern() {
-    	StringBuilder buddy = new StringBuilder();
-    	buddy.append(StaccatoUtil.createTrackElement((byte)9));
-    	buddy.append(" ");
-    	
+        Pattern fullPattern = new Pattern();
     	for (int segment=0; segment < getLength(); segment++) {
-        	byte layerCounter = 0;
-	    	for (String layer : getLayersForSegment(segment)) {
-	        	buddy.append(StaccatoUtil.createLayerElement(layerCounter));
-	        	buddy.append(" ");
-	        	layerCounter++;
-	        	buddy.append(getStaccatoStringForRhythm(layer));
-	        	buddy.append(" ");
-	    	}
+    	    fullPattern.add(getPatternAt(segment));
     	}
-    	return new Pattern(buddy.toString().trim());
+    	return fullPattern;
     }
 
     /** 
@@ -342,7 +344,7 @@ public class Rhythm implements PatternProducer
     	for (int i=0; i < layers.size(); i++) {
     		builders[i] = new StringBuilder();
     		for (int segment=0; segment < getLength(); segment++) {
-    			builders[i].append(getLayersForSegment(segment)[i]);
+    			builders[i].append(getLayersAt(segment)[i]);
     		}
     	}
     	
@@ -414,6 +416,7 @@ public class Rhythm implements PatternProducer
         put('+', "[CRASH_CYMBAL_1]s Rs");
         put('X', "[HAND_CLAP]i");
         put('x', "Rs [HAND_CLAP]s");
+        put(' ', "Ri");
     }};
 }
 

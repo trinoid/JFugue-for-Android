@@ -30,6 +30,7 @@ public class Note implements PatternProducer
 {
 	private byte value;
 	private double duration;
+    private boolean wasOctaveExplicitlySet;
 	private boolean wasDurationExplicitlySet;
 	private byte onVelocity;
 	private byte offVelocity;
@@ -54,6 +55,7 @@ public class Note implements PatternProducer
 	public Note(Note note) {
 		this.value = note.value;
 		this.duration = note.duration;
+        this.wasOctaveExplicitlySet = note.wasOctaveExplicitlySet;
 		this.wasDurationExplicitlySet = note.wasDurationExplicitlySet;
 		this.onVelocity = note.onVelocity;
 		this.offVelocity = note.offVelocity;
@@ -74,6 +76,7 @@ public class Note implements PatternProducer
 	public Note(byte value) {
 		this();
 		this.value = value;
+		this.setOctaveExplicitlySet(false);
 		useDefaultDuration();
 	}
 	
@@ -88,20 +91,27 @@ public class Note implements PatternProducer
 	}
 
 	public Note setValue(byte value) {
-		this.value = value;
+	    this.value = value;
 		return this;
 	}
 	
 	public byte getValue() {
-		return this.value;
+		return isRest() ? 0 : this.value;
 	}
 	
-	public Note changeValue(byte delta) {
-		return setValue((byte)(getValue() + delta));
+	public Note changeValue(int delta) {
+		this.setValue((byte)(getValue() + delta));
+//		this.originalString = null;
+		return this;
+	}
+
+	public Note setOctaveExplicitlySet(boolean set) {
+	    this.wasOctaveExplicitlySet = set;
+	    return this;
 	}
 	
 	public byte getOctave() {
-		return (byte)(this.getValue() / 12);
+		return isRest() ? 0 : (byte)(this.getValue() / Note.OCTAVE);
 	}
 	
 	public double getDuration() {
@@ -126,6 +136,11 @@ public class Note implements PatternProducer
 		return this;
 	}
 
+    public Note useSameExplicitOctaveSettingAs(Note note2) {
+        this.wasOctaveExplicitlySet = note2.wasOctaveExplicitlySet;
+        return this;
+    }
+
 	public Note setDuration(String duration) {
 		return setDuration(NoteProviderFactory.getNoteProvider().getDurationForString(duration));
 	}
@@ -134,6 +149,10 @@ public class Note implements PatternProducer
 		return this.wasDurationExplicitlySet;
 	}
 	
+    public boolean isOctaveExplicitlySet() {
+        return this.wasOctaveExplicitlySet;
+    }
+    
 	/**
 	 * FOR TESTING PURPOSES ONLY - avoids setting "isDurationExplicitlySet" - Please use setDuration instead!
 	 */
@@ -238,7 +257,7 @@ public class Note implements PatternProducer
 	}
 
 	public byte getPositionInOctave() {
-	    return (byte)(getValue() % 12);
+	    return isRest() ? 0 : (byte)(getValue() % Note.OCTAVE);
 	}
 
 	public static boolean isSameNote(String note1, String note2) {
@@ -248,6 +267,25 @@ public class Note implements PatternProducer
 			if (note1.equalsIgnoreCase(NOTE_NAMES_SHARP[i]) && note2.equalsIgnoreCase(NOTE_NAMES_FLAT[i])) return true;
 		}
 		return false;
+	}
+	
+	/**
+	 * This is just Bubble Sort, but allows you to pass a Note.SortingCallback that returns
+	 * a value that you want to sort for a note. For example, to sort based on position in octave,
+	 * your SortingCallback would return note.getPositionInOctave(). This lets you sort by
+	 * note value, octave, position in octave, duration, velocity, and so on.
+	 */
+	public static void sortNotesBy(Note[] notes, Note.SortingCallback callback) {
+        Note temp;
+        for (int i = 0; i < notes.length - 1; i++) {
+            for (int j = 1; j < notes.length - i; j++) {
+                if (callback.getSortingValue(notes[j - 1]) > callback.getSortingValue(notes[j])) {
+                    temp = notes[j - 1];
+                    notes[j - 1] = notes[j];
+                    notes[j] = temp;
+                }
+            }
+        }
 	}
 	
 	public static Note createRest(double duration) {
@@ -264,7 +302,7 @@ public class Note implements PatternProducer
     public static String getToneString(byte noteValue) {
         StringBuilder buddy = new StringBuilder();
         buddy.append(getToneStringWithoutOctave(noteValue));
-        buddy.append(noteValue / 12); // Octave: this should say "-1" if octaves are -1..9
+        buddy.append(noteValue / Note.OCTAVE); 
         return buddy.toString();
     }
 
@@ -279,7 +317,7 @@ public class Note implements PatternProducer
      * @return a MusicString value, like C
      */
     public static String getToneStringWithoutOctave(byte noteValue) {
-        return NOTE_NAMES_COMMON[noteValue % 12];
+        return NOTE_NAMES_COMMON[noteValue % Note.OCTAVE];
     }
 
     /**
@@ -294,9 +332,9 @@ public class Note implements PatternProducer
      */
     public static String getDispositionedToneStringWithoutOctave(int dispose, byte noteValue) {
         if (dispose == -1) {
-        	return NOTE_NAMES_FLAT[noteValue % 12];
+        	return NOTE_NAMES_FLAT[noteValue % Note.OCTAVE];
         } else {
-        	return NOTE_NAMES_SHARP[noteValue % 12];
+        	return NOTE_NAMES_SHARP[noteValue % Note.OCTAVE];
         }
     }
 
@@ -321,7 +359,7 @@ public class Note implements PatternProducer
      * @return frequency in Hertz
      */
     public static double getFrequencyForNote(String note) {
-		return getFrequencyForNote(NoteProviderFactory.getNoteProvider().createNote(note).getValue());
+		return (note.toUpperCase().startsWith("R")) ? 0.0d : getFrequencyForNote(NoteProviderFactory.getNoteProvider().createNote(note).getValue());
     }
 		
     /**
@@ -346,8 +384,12 @@ public class Note implements PatternProducer
     	return baseFrequency * Math.pow(2.0, octavesAboveBase);
     }
 
-    public boolean isValidNote(String candidateNote) {
+    public static boolean isValidNote(String candidateNote) {
         return NoteSubparser.getInstance().matches(candidateNote);
+    }
+    
+    public static boolean isValidQualifier(String candidateQualifier) {
+        return true; // TODO: Implement Note.isValidQualifier when necessary
     }
     
     /**
@@ -407,11 +449,11 @@ public class Note implements PatternProducer
 
     public String getVelocityString() {
     	StringBuilder buddy = new StringBuilder();
-	    if (this.onVelocity != MidiDefaults.MIDI_DEFAULT_ON_VELOCITY) {
-	        buddy.append("a"+this.onVelocity);
+	    if (this.onVelocity != DefaultNoteSettingsManager.getInstance().getDefaultOnVelocity()) {
+	        buddy.append("a"+getOnVelocity());
 	    }
-        if (this.offVelocity != MidiDefaults.MIDI_DEFAULT_OFF_VELOCITY) {
-            buddy.append("d"+this.offVelocity);
+        if (this.offVelocity != DefaultNoteSettingsManager.getInstance().getDefaultOffVelocity()) {
+            buddy.append("d"+getOffVelocity());
         }
         return buddy.toString();
     }
@@ -451,6 +493,19 @@ public class Note implements PatternProducer
 		}
 	}
 	
+	public String getToneString() {
+	    if (isRest) {
+	        return "R";
+	    }
+	    
+        StringBuilder buddy = new StringBuilder();
+        buddy.append(Note.getToneStringWithoutOctave(getValue()));
+	    if (this.wasOctaveExplicitlySet) {
+	        buddy.append(getOctave());
+	    }
+	    return buddy.toString();
+	}
+	
 	/**
 	 * Returns the "decorators" to the base note, which includes the duration if one is explicitly specified, and velocity dynamics if provided
 	 */
@@ -472,6 +527,7 @@ public class Note implements PatternProducer
 		boolean originalStringsMatchSufficientlyWell = ((n2.originalString == null) || (this.originalString == null)) ? true : n2.originalString.equalsIgnoreCase(this.originalString);
 		return ((n2.value == this.value) &&
 		        (n2.duration == this.duration) &&
+                (n2.wasOctaveExplicitlySet == this.wasOctaveExplicitlySet) &&
 		        (n2.wasDurationExplicitlySet == this.wasDurationExplicitlySet) &&
 		        (n2.isEndOfTie == this.isEndOfTie) && 
 		        (n2.isStartOfTie == this.isStartOfTie) &&
@@ -488,19 +544,20 @@ public class Note implements PatternProducer
 	public String toDebugString() {
 		StringBuilder buddy = new StringBuilder();
 		buddy.append("Note:");
-		buddy.append(" value=").append(this.value);
-		buddy.append(" duration=").append(this.duration);
-		buddy.append(" wasDurationExplicitlySet=").append(this.wasDurationExplicitlySet);
-        buddy.append(" isEndOfTie=").append(this.isEndOfTie); 
-        buddy.append(" isStartOfTie=").append(this.isStartOfTie);
-        buddy.append(" isMelodicNote=").append(this.isMelodicNote);
-        buddy.append(" isHarmonicNote=").append(this.isHarmonicNote);
-        buddy.append(" isPercussionNote=").append(this.isPercussionNote) ;
-        buddy.append(" isFirstNote=").append(this.isFirstNote);
-        buddy.append(" isRest=").append(this.isRest); 
-        buddy.append(" onVelocity=").append(this.onVelocity);
-        buddy.append(" offVelocity=").append(this.offVelocity);
-        buddy.append(" originalString=").append(this.originalString);
+		buddy.append(" value=").append(this.getValue());
+		buddy.append(" duration=").append(this.getDuration());
+        buddy.append(" wasOctaveExplicitlySet=").append(this.isOctaveExplicitlySet());
+		buddy.append(" wasDurationExplicitlySet=").append(this.isDurationExplicitlySet());
+        buddy.append(" isEndOfTie=").append(this.isEndOfTie()); 
+        buddy.append(" isStartOfTie=").append(this.isStartOfTie());
+        buddy.append(" isMelodicNote=").append(this.isMelodicNote());
+        buddy.append(" isHarmonicNote=").append(this.isHarmonicNote());
+        buddy.append(" isPercussionNote=").append(this.isPercussionNote()) ;
+        buddy.append(" isFirstNote=").append(this.isFirstNote());
+        buddy.append(" isRest=").append(this.isRest()); 
+        buddy.append(" onVelocity=").append(this.getOnVelocity());
+        buddy.append(" offVelocity=").append(this.getOffVelocity());
+        buddy.append(" originalString=").append(this.getOriginalString());
         return buddy.toString();
 	}
 	
@@ -508,7 +565,7 @@ public class Note implements PatternProducer
     public final static String[] NOTE_NAMES_SHARP = new String[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     public final static String[] NOTE_NAMES_FLAT = new String[] { "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B" };
 
-    public static String[] PERCUSSION_NAMES = new String[] {
+    public final static String[] PERCUSSION_NAMES = new String[] {
     	// Percussion Name		// MIDI Note Value
     	"ACOUSTIC_BASS_DRUM", 	//       35
     	"BASS_DRUM", 			//       36
@@ -564,4 +621,10 @@ public class Note implements PatternProducer
     public static final byte MIN_OCTAVE = 0;
     public static final byte MAX_OCTAVE = 10;
 
+    /** For use with Note.sortNotesBy() */
+    interface SortingCallback {
+        /** Must return an int. If you want to sort by duration (which is decimal), you'll need to work around this. */
+        public int getSortingValue(Note note);
+    }
 }
+

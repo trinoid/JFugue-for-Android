@@ -21,32 +21,34 @@ package org.staccato;
 
 import org.jfugue.pattern.Token.TokenType;
 
-public class BeatTimeSubparser implements Subparser 
+/**
+ * Parses Instrument, Voice, and Layer tokens. Each has values that are parsed as bytes. 
+ * 
+ * @author David Koelle (dkoelle@gmail.com)
+ */
+public class AtomSubparser implements Subparser 
 {
-	public static final char BEATTIME = '@';
-	public static final char BEATTIME_USE_MARKER = '#';
+	public static final char ATOM = '&';
+	public static final String QUARK_SEPARATOR = ",";
 	
-	private static BeatTimeSubparser instance;
+	private static AtomSubparser instance;
 	
-	public static BeatTimeSubparser getInstance() {
+	public static AtomSubparser getInstance() {
 		if (instance == null) {
-			instance = new BeatTimeSubparser();
+			instance = new AtomSubparser();
 		}
 		return instance;
 	}
 	
 	@Override
 	public boolean matches(String music) {
-		return (music.charAt(0) == BEATTIME);
+		return (music.charAt(0) == ATOM); 
 	}
 
     @Override
     public TokenType getTokenType(String tokenString) {
-        if (tokenString.charAt(0) == BEATTIME) {
-            if (tokenString.charAt(1) == BEATTIME_USE_MARKER) {
-                return TokenType.TRACK_TIME_BOOKMARK_REQUESTED;
-            }
-            return TokenType.TRACK_TIME_BOOKMARK;
+        if (tokenString.charAt(0) == ATOM) {
+            return TokenType.ATOM;
         }
         
         return TokenType.UNKNOWN_TOKEN;
@@ -54,19 +56,20 @@ public class BeatTimeSubparser implements Subparser
     
 	@Override
 	public int parse(String music, StaccatoParserContext context) {
-		if (music.charAt(0) == BEATTIME) {
+		if (matches(music)) {
 			int posNextSpace = StaccatoUtil.findNextOrEnd(music, ' ', 0);
-			if (posNextSpace > 1) {
-				String timeTrackId = music.substring(1, posNextSpace);
-				if (timeTrackId.matches("([0-9]+(\\.[0-9]+)*)")) {
-					double time = Double.parseDouble(timeTrackId);
-					context.getParser().fireTrackBeatTimeRequested(time);
-				} else if (timeTrackId.charAt(0) == BEATTIME_USE_MARKER) {
-					String timeBookmarkId = timeTrackId.substring(1, timeTrackId.length());
-					context.getParser().fireTrackBeatTimeBookmarkRequested(timeBookmarkId);
+			music = music.substring(1, posNextSpace); // Remove the initial character
+			String[] quarks = music.split(QUARK_SEPARATOR);
+			for (String quark : quarks) {
+				if (IVLSubparser.getInstance().matches(quark)) {
+					IVLSubparser.getInstance().parse(quark, context);
+				}
+				else if (NoteSubparser.getInstance().matches(quark)) {
+					NoteSubparser.getInstance().parse(quark, context);
 				}
 			}
-			return Math.max(1, posNextSpace);
+			
+			return posNextSpace + 1;
 		}
 		return 0;
 	}

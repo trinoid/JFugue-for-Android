@@ -25,6 +25,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.jfugue.parser.ParserException;
+import org.jfugue.pattern.Token.TokenType;
 import org.jfugue.provider.ChordProvider;
 import org.jfugue.provider.KeyProviderFactory;
 import org.jfugue.provider.NoteProvider;
@@ -74,6 +75,15 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
 		return charArray.contains(music.charAt(0));
 	}
 
+    @Override
+    public TokenType getTokenType(String tokenString) {
+        if (charArray.contains(tokenString.charAt(0))) {
+            return TokenType.NOTE;
+        }
+        
+        return TokenType.UNKNOWN_TOKEN;
+    }
+    
 	@Override
 	public int parse(String s, StaccatoParserContext context) {
 		return parseNoteElement(s, 0, context);
@@ -227,6 +237,8 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
 
      /** Returns the index with which to start parsing the next part of the string, once this method is done with its part */
     private int parseOctave(String s, int index, NoteContext context) {
+        context.isOctaveExplicitlySet = false;
+        
         // Don't parse an octave for a rest or a numeric note
         if (context.isRest || context.isNumericNote) {
             return index;
@@ -264,6 +276,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
             logger.info("Octave string value is " + octaveNumberString);
             try {
                 context.octaveNumber = Integer.parseInt(octaveNumberString) + context.octaveBias;
+                context.isOctaveExplicitlySet = true;
             } catch (NumberFormatException e) {
                 throw new ParserException(StaccatoMessages.OCTAVE_OUT_OF_RANGE, s);
             }
@@ -298,21 +311,26 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
     	if ((index < s.length()) && (s.charAt(index) == '\'')) {
     		int intervalLength = 0;
     		// Verify that index+1 is a number representing the interval.
-    		if (index+1 < s.length() && ((s.charAt(index+1) >= '0') && (s.charAt(index+1) <= '9'))) {
+    		if (index+1 < s.length() && isValidIntervalChar(s.charAt(index+1))) {
     			intervalLength = 1;
     		}
     		// We'll allow for the possibility of double-sharps and double-flats. 
-    		if ((intervalLength == 1) && (index+2 < s.length()) && ((s.charAt(index+2) == '#') || (s.charAt(index+2) == 'B'))) {
+    		if ((intervalLength == 1) && (index+2 < s.length()) && isValidIntervalChar(s.charAt(index+2))) {
     			intervalLength = 2;
     		}
-    		if ((intervalLength == 2) && (index+3 < s.length()) && ((s.charAt(index+3) == '#') || (s.charAt(index+3) == 'B'))) {
+    		if ((intervalLength == 2) && (index+3 < s.length()) && isValidIntervalChar(s.charAt(index+3))) {
     			intervalLength = 3;
     		}
         	context.internalInterval = Intervals.getHalfsteps(s.substring(index+1, index+intervalLength+1));
+        	context.originalString = Note.getToneStringWithoutOctave((byte)(context.noteNumber + context.internalInterval)) + (context.isOctaveExplicitlySet ? context.octaveNumber : "");
         	return index + intervalLength + 1;
     	} else {
     		return index;
     	}    	
+    }
+    
+    private boolean isValidIntervalChar(char ch) {
+        return (((ch >= '0') && (ch <= '9')) || (ch == '#') || (ch == 'B'));
     }
     
     /** Returns the index with which to start parsing the next part of the string, once this method is done with its part */
@@ -362,7 +380,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
                 case 'G': index++; bassNote = true; break;
                 case 'A': index++; bassNote = true; break;
                 case 'B': index++; bassNote = true; break;
-                case '#': index++; break; // presumably the sharp mark followed a note
+                case '#': index++; break; // presumably the sharp mark followed a note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ak; // presumably the sharp mark followed a note
                 // For '0', need to differentiate between initial 0 and 0 as a second digit (i.e., 10)
                 case '0': index++; inversionCount = (inversionCount == -1) ? 0 : inversionCount + 10; break;
                 case '1': index++; inversionCount = 1; break;
@@ -406,24 +424,26 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
         }
 
         // Adjust for Key Signature
-        if (parserContext.getKey() != null) {
-            int keySig = KeyProviderFactory.getKeyProvider().convertKeyToByte(parserContext.getKey());
-            if ((keySig != 0) && (!noteContext.isNatural)) {
-                if ((keySig <= -1) && (noteContext.noteNumber == 11)) noteContext.noteNumber = 10;
-                if ((keySig <= -2) && (noteContext.noteNumber == 4)) noteContext.noteNumber = 3;
-                if ((keySig <= -3) && (noteContext.noteNumber == 9)) noteContext.noteNumber = 8;
-                if ((keySig <= -4) && (noteContext.noteNumber == 2)) noteContext.noteNumber = 1;
-                if ((keySig <= -5) && (noteContext.noteNumber == 7)) noteContext.noteNumber = 6;
-                if ((keySig <= -6) && (noteContext.noteNumber == 0)) { noteContext.noteNumber = 11; noteContext.octaveNumber--; }
-                if ((keySig <= -7) && (noteContext.noteNumber == 5)) noteContext.noteNumber = 4;
-                if ((keySig >= +1) && (noteContext.noteNumber == 5)) noteContext.noteNumber = 6;
-                if ((keySig >= +2) && (noteContext.noteNumber == 0)) noteContext.noteNumber = 1;
-                if ((keySig >= +3) && (noteContext.noteNumber == 7)) noteContext.noteNumber = 8;
-                if ((keySig >= +4) && (noteContext.noteNumber == 2)) noteContext.noteNumber = 3;
-                if ((keySig >= +5) && (noteContext.noteNumber == 9)) noteContext.noteNumber = 10;
-                if ((keySig >= +6) && (noteContext.noteNumber == 4)) noteContext.noteNumber = 5;
-                if ((keySig >= +7) && (noteContext.noteNumber == 11)) { noteContext.noteNumber = 0; noteContext.octaveNumber++; }
-                logger.info("After adjusting for Key Signature, noteNumber=" + noteContext.noteNumber +" octave=" +  noteContext.octaveNumber);
+        if (DefaultNoteSettingsManager.getInstance().getAdjustNotesByKeySignature()) {
+            if (parserContext.getKey() != null) {
+                int keySig = KeyProviderFactory.getKeyProvider().convertKeyToByte(parserContext.getKey());
+                if ((keySig != 0) && (!noteContext.isNatural)) {
+                    if ((keySig <= -1) && (noteContext.noteNumber == 11)) noteContext.noteNumber = 10;
+                    if ((keySig <= -2) && (noteContext.noteNumber == 4)) noteContext.noteNumber = 3;
+                    if ((keySig <= -3) && (noteContext.noteNumber == 9)) noteContext.noteNumber = 8;
+                    if ((keySig <= -4) && (noteContext.noteNumber == 2)) noteContext.noteNumber = 1;
+                    if ((keySig <= -5) && (noteContext.noteNumber == 7)) noteContext.noteNumber = 6;
+                    if ((keySig <= -6) && (noteContext.noteNumber == 0)) { noteContext.noteNumber = 11; noteContext.octaveNumber--; }
+                    if ((keySig <= -7) && (noteContext.noteNumber == 5)) noteContext.noteNumber = 4;
+                    if ((keySig >= +1) && (noteContext.noteNumber == 5)) noteContext.noteNumber = 6;
+                    if ((keySig >= +2) && (noteContext.noteNumber == 0)) noteContext.noteNumber = 1;
+                    if ((keySig >= +3) && (noteContext.noteNumber == 7)) noteContext.noteNumber = 8;
+                    if ((keySig >= +4) && (noteContext.noteNumber == 2)) noteContext.noteNumber = 3;
+                    if ((keySig >= +5) && (noteContext.noteNumber == 9)) noteContext.noteNumber = 10;
+                    if ((keySig >= +6) && (noteContext.noteNumber == 4)) noteContext.noteNumber = 5;
+                    if ((keySig >= +7) && (noteContext.noteNumber == 11)) { noteContext.noteNumber = 0; noteContext.octaveNumber++; }
+                    logger.info("After adjusting for Key Signature, noteNumber=" + noteContext.noteNumber +" octave=" +  noteContext.octaveNumber);
+                }
             }
         }
         
@@ -453,12 +473,12 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
                 case 'X' :
                 case 'O' :
                 case '-' : index = parseLetterDuration(s, index, noteContext, parserContext); break;
-                default : noteContext.decimalDuration = DefaultNoteSettingsManager.getInstance().getDefaultDuration(); noteContext.durationExplicitlySet = false; break; // Could get here if the next character is a velocity char ("a" or "d")
+                default : noteContext.decimalDuration = DefaultNoteSettingsManager.getInstance().getDefaultDuration(); noteContext.isDurationExplicitlySet = false; break; // Could get here if the next character is a velocity char ("a" or "d")
             }
             index = parseTuplet(s, index, noteContext); 
         } else {
         	noteContext.decimalDuration = DefaultNoteSettingsManager.getInstance().getDefaultDuration();
-        	noteContext.durationExplicitlySet = false;
+        	noteContext.isDurationExplicitlySet = false;
         }
 
         logger.info("Decimal duration is " + noteContext.decimalDuration);
@@ -478,7 +498,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
         	index++;
         }
         
-    	context.durationExplicitlySet = true;
+    	context.isDurationExplicitlySet = true;
 
     	// Get the duration value
         int endingIndex = seekToEndOfDecimal(s,index);
@@ -550,7 +570,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
                 }
 
                 if (durationNumber > 0) {
-                	context.durationExplicitlySet = true;
+                	context.isDurationExplicitlySet = true;
                     double d = 1.0/durationNumber;
                     if (isDotted) {
                         context.decimalDuration += d + (d/2.0);
@@ -608,8 +628,8 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
 
                 index += counter;
 
-                double numerator = 2.0d;
-                double denominator = 3.0d;
+                double numerator = 3.0d;
+                double denominator = 2.0d;
                 if ((indexOfUnitsToMatch > 0) && (indexOfNumNotes > 0)) {
                     numerator = Double.parseDouble(s.substring(indexOfUnitsToMatch, indexOfNumNotes-1));
                     denominator = Double.parseDouble(s.substring(indexOfNumNotes, index));
@@ -617,6 +637,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
                 logger.info("Tuplet ratio is "+numerator+":"+denominator);
                 double tupletRatio = numerator / denominator;
                 context.decimalDuration = context.decimalDuration * (1.0d / tupletRatio);
+                context.isDurationExplicitlySet = true;
                 logger.info("Decimal duration after tuplet is " +  context.decimalDuration);
             }
         }
@@ -710,12 +731,13 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
         public String inversionBassNote;
     	public boolean isRest;
     	public boolean isNatural; 
+    	public boolean isOctaveExplicitlySet;
     	public int octaveBias; 
     	public int octaveNumber; 
     	public int internalInterval; 
     	public double decimalDuration;
     	public String durationValueAsString;
-    	public boolean durationExplicitlySet;
+    	public boolean isDurationExplicitlySet;
     	public int mostRecentDuration;
     	public boolean hasIndeterminateDuration;
     	public boolean isEndOfTie;
@@ -786,7 +808,8 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
 	    	}
 
         	Note note = new Note(noteNumber);
-        	if (durationExplicitlySet) {
+        	note.setOctaveExplicitlySet(isOctaveExplicitlySet);
+        	if (isDurationExplicitlySet) {
         		note.setDuration(decimalDuration);
         	}
             note.setOriginalString(originalString);
@@ -883,7 +906,7 @@ public class NoteSubparser implements Subparser, NoteProvider, ChordProvider {
     //
     
     public Chord createChord(String chordString) {
-    	// If the user requested a chord like "C" or "Ab", assume it's MAJOR
+    	// If the user requested a chord like "C" or "Ab" without providing any additional details, assume it's MAJOR
     	if (chordString.length() <= 2) {
     		chordString = chordString + "MAJ";
     	}

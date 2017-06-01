@@ -20,6 +20,7 @@
 package org.staccato;
 
 import org.jfugue.parser.ParserException;
+import org.jfugue.pattern.Token.TokenType;
 import org.jfugue.provider.ChordProviderFactory;
 import org.jfugue.provider.KeyProvider;
 import org.jfugue.theory.Key;
@@ -46,7 +47,7 @@ public class SignatureSubparser implements Subparser, KeyProvider
 		}
 		return instance;
 	}
-	
+
 	@Override
 	public boolean matches(String music) {
 		return (matchesKeySignature(music) || matchesTimeSignature(music));
@@ -60,7 +61,19 @@ public class SignatureSubparser implements Subparser, KeyProvider
 		return (music.length() >= TIME_SIGNATURE.length()) && (music.substring(0, TIME_SIGNATURE.length()).equals(TIME_SIGNATURE));
 	}
 	
-	@Override
+    @Override
+    public TokenType getTokenType(String tokenString) {
+        if (matchesKeySignature(tokenString)) {
+            return TokenType.KEY_SIGNATURE;
+        }
+        if (matchesTimeSignature(tokenString)) {
+            return TokenType.TIME_SIGNATURE;
+        }
+        
+        return TokenType.UNKNOWN_TOKEN;
+    }
+    
+    @Override
 	public int parse(String music, StaccatoParserContext context) {
 		if (matchesKeySignature(music)) {
 			int posNextSpace = StaccatoUtil.findNextOrEnd(music, ' ', 0);
@@ -123,6 +136,15 @@ public class SignatureSubparser implements Subparser, KeyProvider
         return buddy.toString();
 	}
 
+	@Override
+	public byte convertAccidentalCountToKeyRootPositionInOctave(int accidentalCount, byte scale) {
+		if (scale == Scale.MAJOR_INDICATOR) {
+			return new Note(MAJOR_KEY_SIGNATURES[KEYSIG_MIDPOINT - accidentalCount]).getPositionInOctave();
+		} else {
+			return new Note(MINOR_KEY_SIGNATURES[KEYSIG_MIDPOINT - accidentalCount]).getPositionInOctave();
+		}
+	}
+	
 	@Override
 	public byte convertKeyToByte(Key key) {
 		String noteName = Note.getDispositionedToneStringWithoutOctave(key.getScale().getDisposition(), key.getRoot().getValue());

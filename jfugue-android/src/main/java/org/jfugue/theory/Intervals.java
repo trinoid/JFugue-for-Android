@@ -25,13 +25,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 
-import org.jfugue.pattern.NotesProducer;
+import org.jfugue.pattern.ReplacementFormatUtil;
+import org.jfugue.pattern.NoteProducer;
 import org.jfugue.pattern.Pattern;
 import org.jfugue.pattern.PatternProducer;
 import org.jfugue.provider.NoteProviderFactory;
 import org.staccato.NoteSubparser;
 
-public class Intervals implements PatternProducer, NotesProducer
+public class Intervals implements PatternProducer, NoteProducer
 {
 	private static Map<Integer, Integer> wholeNumberDegreeToHalfsteps;
 	private static Map<Integer, Integer> halfstepsToWholeNumberDegree;
@@ -75,8 +76,7 @@ public class Intervals implements PatternProducer, NotesProducer
 	private String intervalPattern;
 	private Note rootNote;
 	private static java.util.regex.Pattern numberPattern = java.util.regex.Pattern.compile("\\d+");
-	private String[] splitEachSequence;
-	private String[] splitAllSequence;
+	private String asSequence;
 
 	public Intervals(String intervalPattern) {
 		this.intervalPattern = intervalPattern;
@@ -91,31 +91,26 @@ public class Intervals implements PatternProducer, NotesProducer
 		return this;
 	}
 
+	
 	@Override
 	public org.jfugue.pattern.Pattern getPattern() {
 		assert (rootNote != null);
 		
 		String[] intervals = intervalPattern.split(" ");
-		int allSequenceCounter = 0;
-		org.jfugue.pattern.Pattern pattern = new org.jfugue.pattern.Pattern();
+		int counter = 0;
+		Note[] candidateNotes = new Note[intervals.length];
+		
 		for (String interval : intervals) {
 		    Note note = new Note((byte)(rootNote.getValue() + Intervals.getHalfsteps(interval)));
-			if (splitEachSequence != null) {
-			    for (String add : splitEachSequence) {
-			        pattern.add(note.toString() + add);
-			    }
-			} 
-			else if (splitAllSequence != null) {
-			    pattern.add(note.toString() + splitAllSequence[allSequenceCounter++]);
-			    if (allSequenceCounter == splitAllSequence.length) {
-			        allSequenceCounter = 0;
-			    }
-			} 
-			else {
-			    pattern.add(note);
-			}
+		    candidateNotes[counter++] = note;
 		}
-		return pattern;
+		Pattern intervalNotes = new Pattern(candidateNotes);
+		
+		if (asSequence != null) {
+		    return ReplacementFormatUtil.replaceDollarsWithCandidates(asSequence, candidateNotes, intervalNotes);
+		} else {
+		    return intervalNotes;
+		}
 	}
 	
 	@Override
@@ -138,8 +133,8 @@ public class Intervals implements PatternProducer, NotesProducer
 		return intervalPattern.split(" ").length;
 	}
 
-	public static int getHalfsteps(String interval) {
-		return wholeNumberDegreeToHalfsteps.get(getNumberPortionOfInterval(interval)) + calculateHalfstepsFromFlatsAndSharps(interval);
+	public static int getHalfsteps(String wholeNumberDegree) {
+		return wholeNumberDegreeToHalfsteps.get(getNumberPortionOfInterval(wholeNumberDegree)) + calculateHalfstepDeltaFromFlatsAndSharps(wholeNumberDegree);
 	}
 	
 	public int[] toHalfstepArray() {
@@ -156,9 +151,9 @@ public class Intervals implements PatternProducer, NotesProducer
 	 * flats or sharps in a given interval. So, for "b3", 
 	 * this would return -1. For "##5", this would return 2. 
 	 */
-	private static int calculateHalfstepsFromFlatsAndSharps(String interval) {
+	private static int calculateHalfstepDeltaFromFlatsAndSharps(String wholeNumberDegree) {
 		int numHalfsteps = 0;
-		for (char ch : interval.toUpperCase().toCharArray()) {
+		for (char ch : wholeNumberDegree.toUpperCase().toCharArray()) {
 			if (ch == 'B') {
 				numHalfsteps -= 1;
 			} else if (ch == '#') {
@@ -206,17 +201,45 @@ public class Intervals implements PatternProducer, NotesProducer
 		this.intervalPattern = buddy.toString().trim();
 		return this;
 	}
-	
-	public Intervals eachIntervalAs(String eachSequence) {
-	    this.splitEachSequence = eachSequence.split(" ");
-	    return this;
-	}
-	
-	public Intervals allIntervalsAs(String allSequence) {
-	    this.splitAllSequence = allSequence.split(" ");
-	    return this;
+
+	/**
+	 * Returns true if this interval contains the provided note
+	 * in any octave.
+	 * Requires that the interval has a root; the octave of the root
+	 * or the provided values are ignored.
+	 */
+	public boolean has(String note) {
+		return has(NoteProviderFactory.getNoteProvider().createNote(note));
 	}
 
+	/**
+	 * Returns true if this interval contains the provided note
+	 * in any octave.
+	 * Requires that the interval has a root; the octave of the root
+	 * or the provided values are ignored.
+	 */
+	public boolean has(Note note) {
+		if (this.rootNote == null) {
+			return false;
+		}
+		for (String interval : intervalPattern.split(" ")) {
+			int intervalValue = (rootNote.getValue() + getHalfsteps(interval)) % Note.OCTAVE;
+			if (intervalValue == note.getPositionInOctave()) { 
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	/** 
+	 * Accepts a string of replacement values, like $1 $2 $2, which will be
+	 * populated with the 1st, 2nd, and 2nd intervals when getPattern() is called.
+	 */
+	public Intervals as(String asSequence) {
+	    this.asSequence = asSequence;
+	    return this;
+	}
+	
 	public String toString() {
 		return this.intervalPattern;
 	}
@@ -249,7 +272,12 @@ public class Intervals implements PatternProducer, NotesProducer
 		StringBuilder buddy = new StringBuilder();
 		buddy.append("1 ");
 		for (int i=1; i < notes.length; i++) {
-			int diff = notes[i].getValue()-notes[0].getValue();
+			int diff = 0;
+			if (notes[i].getPositionInOctave() < notes[0].getPositionInOctave()) {
+			    diff = notes[i].getPositionInOctave() + 12 - notes[0].getPositionInOctave();
+			} else {
+			    diff = notes[i].getPositionInOctave()-notes[0].getPositionInOctave();
+			}
 			if (!halfstepsToWholeNumberDegree.containsKey(diff)) {
 				diff += 1;
 				buddy.append("b");
@@ -260,4 +288,10 @@ public class Intervals implements PatternProducer, NotesProducer
 		}
 		return new Intervals(buddy.toString().trim());
 	}
+	
+	private static String[] CANDIDATE_INTERVALS = new String[] { "b1", "1", "#1", "b2", "2", "#2", "b3", "3", "#3", 
+	                                                             "b4", "4", "#4", "b5", "5", "#5", "b6", "6", "#6",
+	                                                             "b7", "7", "#7", "b8", "8", "#8", "b9", "9", "#9",
+	                                                             "b10", "10", "#10", "b11", "11", "#11", "b12", "12", "#12", 
+	                                                             "b13", "13", "#13", "b14", "14", "#14", "b15", "15", "#15" };
 }

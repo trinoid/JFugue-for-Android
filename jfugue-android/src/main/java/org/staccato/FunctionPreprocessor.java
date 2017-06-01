@@ -37,9 +37,9 @@ public class FunctionPreprocessor implements Preprocessor
 		return instance;
 	}
 
-	private static Pattern functionPattern = Pattern.compile(":\\S+\\(\\p{ASCII}*\\)");
-	private static Pattern namePattern = Pattern.compile(":\\S+\\(");
-	private static Pattern paramPattern = Pattern.compile("\\(\\p{ASCII}*\\)");
+	private static java.util.regex.Pattern functionPattern = Pattern.compile(":\\S+\\(\\p{ASCII}*\\)");
+	private static java.util.regex.Pattern namePattern = Pattern.compile(":\\S+\\(");
+	private static java.util.regex.Pattern paramPattern = Pattern.compile("\\(\\p{ASCII}*\\)");
 	
 	@Override
 	public String preprocess(String s, StaccatoParserContext context) {

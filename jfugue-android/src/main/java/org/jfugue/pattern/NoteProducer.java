@@ -4,6 +4,6 @@ import java.util.List;
 
 import org.jfugue.theory.Note;
 
-public interface NotesProducer {
+public interface NoteProducer {
     public List<Note> getNotes();
 }

@@ -19,9 +19,6 @@
  
 package org.jfugue.midi;
 
-import org.jfugue.parser.Parser;
-import org.jfugue.theory.Note;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,6 +31,11 @@ import jp.kshoji.javax.sound.midi.Sequence;
 import jp.kshoji.javax.sound.midi.ShortMessage;
 import jp.kshoji.javax.sound.midi.SysexMessage;
 import jp.kshoji.javax.sound.midi.Track;
+
+import org.jfugue.parser.Parser;
+import org.jfugue.provider.KeyProviderFactory;
+import org.jfugue.theory.Note;
+import org.jfugue.theory.Scale;
 
 public class MidiParser extends Parser
 {
@@ -203,13 +205,14 @@ public class MidiParser extends Parser
         
         long durationInTicks = event.getTick() - tempNote.startTick;
         double durationInBeats = getDurationInBeats(durationInTicks);
-        byte decayVelocity = event.getMessage().getMessage()[2];
+        byte noteOffVelocity = event.getMessage().getMessage()[2];
         this.expectedTimeInBeats[this.currentChannel] = this.currentTimeInBeats[this.currentChannel] + durationInBeats; 
 	
         Note noteObject = new Note(note);
         noteObject.setDuration(getDurationInBeats(durationInTicks)); 
-        noteObject.setOnVelocity(tempNote.attackVelocity);
-        noteObject.setOffVelocity(decayVelocity);
+        noteObject.setOnVelocity(tempNote.noteOnVelocity);
+        noteObject.setOffVelocity(noteOffVelocity);
+        fireNoteReleased(new Note(note).setOffVelocity(noteOffVelocity));
         fireNoteParsed(noteObject);
     }    
     
@@ -221,12 +224,14 @@ public class MidiParser extends Parser
         }
         
         byte note = event.getMessage().getMessage()[1];
-        byte attackVelocity = event.getMessage().getMessage()[2];
+        byte noteOnVelocity = event.getMessage().getMessage()[2];
         if (noteCache.get(channel).get(note) != null) {
         	// The note already existed in the cache! Nothing to do about it now. This shouldn't happen.
         } else {
-        	noteCache.get(channel).put(note, new TempNote(event.getTick(), attackVelocity));
+        	noteCache.get(channel).put(note, new TempNote(event.getTick(), noteOnVelocity));
         }
+        
+        fireNotePressed(new Note(note).setOnVelocity(noteOnVelocity));
     }
         
     private void polyphonicAftertouch(int channel, MidiEvent event) {
@@ -266,7 +271,8 @@ public class MidiParser extends Parser
     }
     
     private void keySigParsed(MetaMessage meta) {
-    	fireKeySignatureParsed(meta.getData()[0], meta.getData()[1]);
+    	byte scale = meta.getData()[1] == 0 ? Scale.MAJOR_INDICATOR : Scale.MINOR_INDICATOR;
+    	fireKeySignatureParsed(KeyProviderFactory.getKeyProvider().convertAccidentalCountToKeyRootPositionInOctave(meta.getData()[0], scale), scale);
     }
 
     private void timeSigParsed(MetaMessage meta) {
@@ -345,11 +351,11 @@ public class MidiParser extends Parser
     
     class TempNote {
         long startTick;
-        byte attackVelocity;
+        byte noteOnVelocity;
         
-        public TempNote(long startTick, byte attackVelocity) {
+        public TempNote(long startTick, byte noteOnVelocity) {
             this.startTick = startTick;
-            this.attackVelocity = attackVelocity;
+            this.noteOnVelocity = noteOnVelocity;
         }
     }
 }

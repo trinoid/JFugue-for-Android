@@ -19,8 +19,6 @@
 
 package org.jfugue.midi;
 
-import org.jfugue.theory.Note;
-
 import java.util.logging.Logger;
 
 import jp.kshoji.javax.sound.midi.InvalidMidiDataException;
@@ -30,6 +28,8 @@ import jp.kshoji.javax.sound.midi.Sequence;
 import jp.kshoji.javax.sound.midi.ShortMessage;
 import jp.kshoji.javax.sound.midi.SysexMessage;
 import jp.kshoji.javax.sound.midi.Track;
+
+import org.jfugue.theory.Note;
 
 /**
  * Places musical data into the MIDI sequence.
@@ -105,7 +105,7 @@ final class MidiEventManager extends TrackTimeManager
     	bytes[0] = (byte)((int)mpqn >> 16);
     	bytes[1] = (byte)((int)mpqn >> 8);
     	bytes[2] = (byte)((int)mpqn);
-    	this.addMetaMessage(0x51, bytes);
+    	this.addMetaMessage(MidiDefaults.META_TEMPO, bytes);
     }
     
     public void setTimeSignature(byte beatsPerMeasure, byte durationForBeat) {
@@ -154,7 +154,7 @@ final class MidiEventManager extends TrackTimeManager
         MetaMessage message = new MetaMessage();
         try {
             message.setMessage(0x2F, null, 0);
-            for (byte i=0; i < getLastCreatedTrack(); i++) {
+            for (byte i=0; i < getLastCreatedTrackNumber(); i++) {
             	if (track[i] != null) {
             		track[i].add(new MidiEvent(message, convertBeatsToTicks(getLatestTrackBeatTime(i))));
             	}
@@ -166,6 +166,17 @@ final class MidiEventManager extends TrackTimeManager
     }
     
     /**
+     * Returns the track indicated by getCurrentTrackNumber(), and creates the track
+     * if it does not already exist.
+     */
+    public Track getCurrentTrack() {
+        if (track[getCurrentTrackNumber()] == null) {
+            track[getCurrentTrackNumber()] = sequence.createTrack();
+        }
+        return track[getCurrentTrackNumber()];
+    }
+
+    /**
      * Adds a MetaMessage to the current track.  
      *
      * @param type the type of the MetaMessage
@@ -176,7 +187,7 @@ final class MidiEventManager extends TrackTimeManager
             MetaMessage message = new MetaMessage();
             message.setMessage(type, bytes, bytes.length);
             MidiEvent event = new MidiEvent(message, convertBeatsToTicks(getTrackBeatTime()));
-            track[getCurrentTrack()].add(event);
+            getCurrentTrack().add(event);
         } catch (InvalidMidiDataException e)
         {
             // We've kept a good eye on the data.  This exception won't happen.
@@ -194,7 +205,7 @@ final class MidiEventManager extends TrackTimeManager
     		SysexMessage message = new SysexMessage();
     		message.setMessage(bytes, bytes.length);
             MidiEvent event = new MidiEvent(message, convertBeatsToTicks(getTrackBeatTime()));
-            track[getCurrentTrack()].add(event);
+            getCurrentTrack().add(event);
         } catch (InvalidMidiDataException e)
         {
             // We've kept a good eye on the data.  This exception won't happen.
@@ -211,15 +222,15 @@ final class MidiEventManager extends TrackTimeManager
     public void addEvent(int command, int data1) {
         try {
             ShortMessage message = new ShortMessage();
-            message.setMessage(command, getCurrentTrack(), data1);
-            track[getCurrentTrack()].add(new MidiEvent(message, convertBeatsToTicks(getTrackBeatTime())));
+            message.setMessage(command, getCurrentTrackNumber(), data1);
+            getCurrentTrack().add(new MidiEvent(message, convertBeatsToTicks(getTrackBeatTime())));
         } catch (InvalidMidiDataException e)
         {
             // We've kept a good eye on the data.  This exception won't happen.
             logger.warning(e.getMessage());
         }
     }
-
+    
     /**
      * Adds a MIDI event to the current track.  
      *
@@ -229,10 +240,7 @@ final class MidiEventManager extends TrackTimeManager
      */
     public void addEvent(int command, int data1, int data2) {
         try {
-            if (track[getCurrentTrack()] == null) {
-                track[getCurrentTrack()] = sequence.createTrack();
-            }
-            track[getCurrentTrack()].add(new MidiEvent(createShortMessage(command, data1, data2), convertBeatsToTicks(getTrackBeatTime())));
+            getCurrentTrack().add(new MidiEvent(createShortMessage(command, data1, data2), convertBeatsToTicks(getTrackBeatTime())));
         } catch (InvalidMidiDataException e)
         {
             // We've kept a good eye on the data.  This exception won't happen.
@@ -242,7 +250,7 @@ final class MidiEventManager extends TrackTimeManager
 
     private ShortMessage createShortMessage(int status,int data1, int data2) throws InvalidMidiDataException {
         ShortMessage message = new ShortMessage();
-        message.setMessage(status, getCurrentTrack(), data1, data2);
+        message.setMessage(status, getCurrentTrackNumber(), data1, data2);
         return message;
     }
 

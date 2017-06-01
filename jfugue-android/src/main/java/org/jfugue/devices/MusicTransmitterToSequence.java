@@ -19,9 +19,6 @@
 
 package org.jfugue.devices;
 
-import org.jfugue.midi.MidiDefaults;
-import org.jfugue.player.SequencerManager;
-
 import jp.kshoji.javax.sound.midi.InvalidMidiDataException;
 import jp.kshoji.javax.sound.midi.MidiDevice;
 import jp.kshoji.javax.sound.midi.MidiUnavailableException;
@@ -31,17 +28,20 @@ import jp.kshoji.javax.sound.midi.Sequencer;
 import jp.kshoji.javax.sound.midi.Track;
 import jp.kshoji.javax.sound.midi.Transmitter;
 
+import org.jfugue.midi.MidiDefaults;
+import org.jfugue.player.SequencerManager;
+
 /**
  * Represents a device that will send music. For example, you can attach this
  * to your external MIDI keyboard and play music on the keyboard, which is then recorded here.
  */
-public class MusicTransmitter2 
+public class MusicTransmitterToSequence
 {
     private MidiDevice device;
     private boolean isInitiated;
     private Sequencer sequencer;
     
-    public MusicTransmitter2(MidiDevice device) throws MidiUnavailableException {
+    public MusicTransmitterToSequence(MidiDevice device) throws MidiUnavailableException {
         this.device = device;
         this.isInitiated = false;
     }
@@ -68,15 +68,6 @@ public class MusicTransmitter2
         }
     }
     
-    /**
-     * Reads a pattern from the external device - use this to record the
-     * keys you're pressing on the keyboard!  
-     * 
-     * This method will return a JFugue Pattern, which you can then 
-     * manipulate to your heart's content.
-     * 
-     * @return The Pattern representing the music played on the device
-     */
     public void startListening() throws MidiUnavailableException, InvalidMidiDataException {
         init();
         sequencer.startRecording();

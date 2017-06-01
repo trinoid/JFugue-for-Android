@@ -19,8 +19,6 @@
 
 package org.jfugue.devices;
 
-import org.jfugue.midi.MidiParser;
-
 import jp.kshoji.javax.sound.midi.MidiEvent;
 import jp.kshoji.javax.sound.midi.MidiMessage;
 import jp.kshoji.javax.sound.midi.MidiSystem;
@@ -29,12 +27,14 @@ import jp.kshoji.javax.sound.midi.Receiver;
 import jp.kshoji.javax.sound.midi.Sequence;
 import jp.kshoji.javax.sound.midi.Sequencer;
 
+import org.jfugue.midi.MidiParser;
+
 /**
- * This class represents a MidiParser that is also a MIDI Receiver.
+ * This class represents a MidiParser that is also a MIDI Receiver (javax.sound.midi.Receiver).
  * As a MidiParser, it can have ParserListeners 
  * As a Receiver, it overrides send() and sends the resulting MidiMessage and timestamp to MidiParser's parseEvent method.
  */
-public class MidiParserReceiver implements Receiver
+public class MidiParserReceiver implements Receiver 
 {
     private MidiParser parser;
     private Sequencer sequencer;
